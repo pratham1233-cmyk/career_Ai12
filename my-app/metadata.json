@@ -1,0 +1,6 @@
+{
+  "name": "CareerAI - AI-Powered Career & Hiring Intelligence",
+  "description": "Unified platform for students, job seekers, and recruiters with language-specific interactive coding practice, interview preparation, and curated course pathways.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
