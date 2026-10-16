@@ -1,10 +1,14 @@
 import { CVAnalysisResult, PracticeQuestion } from '../types/career';
 
-export async function analyzeCvApi(cvText: string, targetCareer: string): Promise<CVAnalysisResult> {
+export async function analyzeCvApi(
+  cvText: string,
+  jobDescriptionText: string,
+  targetCareer: string
+): Promise<CVAnalysisResult> {
   const res = await fetch('/api/ai/analyze-cv', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cvText, targetCareer }),
+    body: JSON.stringify({ cvText, jobDescriptionText, targetCareer }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -152,4 +156,3 @@ export async function checkCodeSolutionApi(params: {
   }
   return res.json();
 }
-

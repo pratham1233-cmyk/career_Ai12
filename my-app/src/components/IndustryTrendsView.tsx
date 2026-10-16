@@ -3,8 +3,6 @@ import { IndustryTrend } from '../types/career';
 import { fetchLiveTrendsApi } from '../services/aiApi';
 import {
   TrendingUp,
-  Search,
-  Globe,
   Sparkles,
   RefreshCw,
   ExternalLink,
@@ -25,8 +23,6 @@ export const IndustryTrendsView: React.FC<IndustryTrendsViewProps> = ({
 }) => {
   const [trendsList, setTrendsList] = useState<IndustryTrend[]>(initialTrends);
   const [isLoadingLive, setIsLoadingLive] = useState(false);
-  const [groundingSources, setGroundingSources] = useState<any[]>([]);
-  const [searchQueries, setSearchQueries] = useState<string[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string>('Real-time sync ready');
 
   const handleRefreshLiveTrends = async () => {
@@ -36,13 +32,7 @@ export const IndustryTrendsView: React.FC<IndustryTrendsViewProps> = ({
       if (result.trends && result.trends.length > 0) {
         setTrendsList(result.trends);
       }
-      if (result.groundingSources) {
-        setGroundingSources(result.groundingSources);
-      }
-      if (result.webQueries) {
-        setSearchQueries(result.webQueries);
-      }
-      setLastUpdated(`Updated just now (${new Date().toLocaleTimeString()}) via Google Search`);
+      setLastUpdated(`Updated just now (${new Date().toLocaleTimeString()})`);
     } catch (err) {
       console.error(err);
     } finally {
@@ -56,14 +46,16 @@ export const IndustryTrendsView: React.FC<IndustryTrendsViewProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center space-x-1.5">
-              <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Google Search Grounded Market Intel</span>
+            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-cyan-100 text-cyan-900 border border-cyan-300 flex items-center space-x-1.5">
+              <TrendingUp className="w-3.5 h-3.5 text-cyan-800" />
+              <span>Market Intel</span>
             </span>
           </div>
-          <h2 className="text-2xl font-bold text-white mt-1">Current Tech Industry Trends</h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Real-time market growth indicators, emerging technologies, and in-demand skills grounded in live search data.
+          <h2 className="mt-2 text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
+            Current Tech Industry Trends
+          </h2>
+          <p className="text-sm text-slate-600 mt-1">
+            Real-time market growth indicators, emerging technologies, and in-demand skills.
           </p>
         </div>
 
@@ -73,40 +65,11 @@ export const IndustryTrendsView: React.FC<IndustryTrendsViewProps> = ({
           className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-cyan-600/25 transition disabled:opacity-50"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isLoadingLive ? 'animate-spin' : ''}`} />
-          <span>{isLoadingLive ? 'Querying Google Search...' : 'Refresh Live Trends (Search Grounding)'}</span>
+          <span>{isLoadingLive ? 'Refreshing trends...' : 'Refresh Live Trends'}</span>
         </button>
       </div>
 
-      {/* Google Search Grounding Verification Pill */}
-      <div className="bg-slate-900/90 border border-cyan-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xl">
-        <div className="flex items-center space-x-3 text-xs text-slate-300">
-          <div className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
-            <Globe className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="flex items-center space-x-2 font-bold text-white">
-              <span>Google Search Grounding Active</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-mono">
-                gemini-3.8-flash + googleSearch
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400">{lastUpdated}</p>
-          </div>
-        </div>
-
-        {searchQueries.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {searchQueries.slice(0, 2).map((query, i) => (
-              <span
-                key={i}
-                className="px-2.5 py-1 rounded-md bg-slate-800 text-cyan-300 text-[10px] font-mono border border-slate-700/60"
-              >
-                🔍 "{query}"
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      <div className="text-xs text-slate-400">{lastUpdated}</div>
 
       {/* Trends Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

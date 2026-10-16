@@ -28,18 +28,32 @@ interface RecruiterDashboardViewProps {
 }
 
 export const RecruiterDashboardView: React.FC<RecruiterDashboardViewProps> = ({
-  candidates: initialCandidates,
+  candidates: candidatesList,
   jobs,
   onUpdateCandidateStatus,
   onRequestSheetsExport,
 }) => {
-  const [candidatesList, setCandidatesList] = useState<RecruiterCandidate[]>(initialCandidates);
   const [selectedJobFilter, setSelectedJobFilter] = useState<string>('job_01');
   const [selectedCandidate, setSelectedCandidate] = useState<RecruiterCandidate | null>(null);
   const [isScreeningAi, setIsScreeningAi] = useState(false);
   const [screeningEvaluation, setScreeningEvaluation] = useState<any | null>(null);
 
   const activeJob = jobs.find((j) => j.id === selectedJobFilter) || jobs[0];
+  const interviewCount = candidatesList.filter((candidate) => candidate.status === 'Interview').length;
+  const offerCount = candidatesList.filter((candidate) => candidate.status === 'Offered').length;
+
+  const getCandidateStatusStyle = (status: RecruiterCandidate['status']) => {
+    switch (status) {
+      case 'Interview':
+        return 'bg-indigo-50 text-indigo-800 border-indigo-200';
+      case 'Offered':
+        return 'bg-emerald-50 text-emerald-800 border-emerald-200';
+      case 'Rejected':
+        return 'bg-rose-50 text-rose-800 border-rose-200';
+      default:
+        return 'bg-slate-100 text-slate-700 border-slate-200';
+    }
+  };
 
   const handleExportCandidatesToSheets = () => {
     const headers = [
@@ -120,11 +134,11 @@ export const RecruiterDashboardView: React.FC<RecruiterDashboardViewProps> = ({
         </div>
         <div className="bg-white border border-slate-200 p-4 rounded-lg">
           <span className="text-slate-500">Interviews Scheduled</span>
-          <p className="text-xl font-mono font-bold text-slate-900 mt-1">4</p>
+          <p className="text-xl font-mono font-bold text-slate-900 mt-1">{interviewCount}</p>
         </div>
         <div className="bg-white border border-slate-200 p-4 rounded-lg">
           <span className="text-slate-500">Offers Extended</span>
-          <p className="text-xl font-mono font-bold text-slate-900 mt-1">2</p>
+          <p className="text-xl font-mono font-bold text-slate-900 mt-1">{offerCount}</p>
         </div>
       </div>
 
@@ -183,7 +197,7 @@ export const RecruiterDashboardView: React.FC<RecruiterDashboardViewProps> = ({
                   <td className="py-3.5 px-4 font-mono font-semibold text-slate-900">{cand.codingScore}%</td>
                   <td className="py-3.5 px-4 text-slate-600 font-mono">{cand.leetcodeCount} problems</td>
                   <td className="py-3.5 px-4">
-                    <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                    <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${getCandidateStatusStyle(cand.status)}`}>
                       {cand.status}
                     </span>
                   </td>

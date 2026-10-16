@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PracticeQuestion, SkillScore, CodeCheckResult } from '../types/career';
-import { checkCodeSolutionApi } from '../services/aiApi';
+import { checkCodeSolutionApi, generateAdaptiveQuestionsApi } from '../services/aiApi';
 import confetti from 'canvas-confetti';
 import {
   Code2,
@@ -32,13 +32,18 @@ export const SmartCodingPracticeView: React.FC<SmartCodingPracticeViewProps> = (
   skills,
   onSkillScoreBoost,
 }) => {
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('Python');
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('');
+  const [selectedDifficulty, setSelectedDifficulty] = useState<PracticeQuestion['difficulty'] | ''>('');
+  const [hasStartedPractice, setHasStartedPractice] = useState(false);
+  const [generatedQuestions, setGeneratedQuestions] = useState<PracticeQuestion[]>([]);
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
+  const [questionGenerationError, setQuestionGenerationError] = useState<string | null>(null);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [userCode, setUserCode] = useState<string>('');
   const [showHint, setShowHint] = useState<boolean>(false);
   const [isChecking, setIsChecking] = useState<boolean>(false);
   const [checkResult, setCheckResult] = useState<CodeCheckResult | null>(null);
-  const [solvedQuestionIds, setSolvedQuestionIds] = useState<Set<string>>(new Set(['q_py_01']));
+  const [solvedQuestionIds, setSolvedQuestionIds] = useState<Set<string>>(new Set());
 
   const availableLanguages = [
     'Python',
@@ -50,18 +55,28 @@ export const SmartCodingPracticeView: React.FC<SmartCodingPracticeViewProps> = (
     'SQL',
     'Rust',
   ];
+  const availableDifficulties: PracticeQuestion['difficulty'][] = [
+    'Beginner',
+    'Intermediate',
+    'Advanced',
+  ];
 
-  // Filter questions for the selected language
-  const languageQuestions = allQuestions.filter(
-    (q) => q.language.toLowerCase() === selectedLanguage.toLowerCase()
+  // Show only questions matching the learner's language and level.
+  const curatedQuestions = allQuestions.filter(
+    (q) =>
+      q.language.toLowerCase() === selectedLanguage.toLowerCase() &&
+      q.difficulty === selectedDifficulty
   );
+  const languageQuestions = generatedQuestions.length > 0 ? generatedQuestions : curatedQuestions;
 
-  const activeQuestion = allQuestions.find((q) => q.id === activeQuestionId);
+  const activeQuestion =
+    allQuestions.find((q) => q.id === activeQuestionId) ??
+    generatedQuestions.find((q) => q.id === activeQuestionId);
 
   // When a user selects a question from the list
   const handleSelectQuestion = (q: PracticeQuestion) => {
     setActiveQuestionId(q.id);
-    setUserCode(q.starterCode || q.codeSnippet || `// Write your ${q.language} solution here\n`);
+    setUserCode('');
     setCheckResult(null);
     setShowHint(false);
   };
@@ -74,7 +89,7 @@ export const SmartCodingPracticeView: React.FC<SmartCodingPracticeViewProps> = (
 
   const handleResetCode = () => {
     if (!activeQuestion) return;
-    setUserCode(activeQuestion.starterCode || activeQuestion.codeSnippet || '');
+    setUserCode('');
     setCheckResult(null);
   };
 
@@ -85,6 +100,40 @@ export const SmartCodingPracticeView: React.FC<SmartCodingPracticeViewProps> = (
     const nextQ = languageQuestions[nextIndex];
     if (nextQ) {
       handleSelectQuestion(nextQ);
+    }
+  };
+
+  const handleStartPractice = async () => {
+    if (!selectedLanguage || !selectedDifficulty || isGeneratingQuestions) return;
+    setQuestionGenerationError(null);
+    const minimumQuestionCount = 3;
+    if (curatedQuestions.length >= minimumQuestionCount) {
+      setGeneratedQuestions([]);
+      setHasStartedPractice(true);
+      return;
+    }
+
+    setIsGeneratingQuestions(true);
+    try {
+      const result = await generateAdaptiveQuestionsApi(
+        selectedLanguage,
+        skills.filter((skill) => skill.score < skill.targetScore).map((skill) => skill.name),
+        selectedDifficulty,
+        minimumQuestionCount - curatedQuestions.length
+      );
+      const combinedQuestions = [...curatedQuestions, ...result.questions];
+      if (combinedQuestions.length < minimumQuestionCount) {
+        throw new Error('Could not prepare at least three questions for this selection. Please try again.');
+      }
+      setGeneratedQuestions(combinedQuestions);
+      setHasStartedPractice(true);
+    } catch (error) {
+      console.error('Failed to generate coding practice questions:', error);
+      setQuestionGenerationError(
+        error instanceof Error ? error.message : 'Could not generate questions. Please try again.'
+      );
+    } finally {
+      setIsGeneratingQuestions(false);
     }
   };
 
@@ -151,15 +200,19 @@ export const SmartCodingPracticeView: React.FC<SmartCodingPracticeViewProps> = (
       <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="text-xs text-slate-500 font-medium mb-1 flex items-center space-x-2">
-            <span>Language-Focused Practice</span>
-            <span>•</span>
-            <span className="text-slate-900 font-semibold">{selectedLanguage}</span>
+            <span>Coding Practice</span>
+            {hasStartedPractice && selectedLanguage && selectedDifficulty && (
+              <>
+                <span>•</span>
+                <span className="text-slate-900 font-semibold">{selectedLanguage} · {selectedDifficulty}</span>
+              </>
+            )}
           </div>
           <h2 className="text-2xl font-serif font-bold text-slate-900">
-            Interactive Coding Practice & Verification
+            Choose Your Coding Practice
           </h2>
           <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
-            Select a programming language, choose a question, write your solution in the editor, and submit to check correctness against test cases with actionable improvements.
+            Choose a programming language and experience level to get questions suited to you.
           </p>
         </div>
 
@@ -175,51 +228,103 @@ export const SmartCodingPracticeView: React.FC<SmartCodingPracticeViewProps> = (
         </div>
       </div>
 
-      {/* Language Selector Bar */}
-      <div className="bg-white border border-slate-200 p-2 rounded-lg flex items-center space-x-1.5 overflow-x-auto no-scrollbar text-xs">
-        <span className="text-slate-400 font-medium px-2 shrink-0">Select Language:</span>
-        {availableLanguages.map((lang) => {
-          const isSelected = selectedLanguage.toLowerCase() === lang.toLowerCase();
-          const count = allQuestions.filter(
-            (q) => q.language.toLowerCase() === lang.toLowerCase()
-          ).length;
-          return (
-            <button
-              key={lang}
-              onClick={() => {
-                setSelectedLanguage(lang);
-                setActiveQuestionId(null);
-                setCheckResult(null);
-              }}
-              className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-md font-medium whitespace-nowrap transition ${
-                isSelected
-                  ? 'bg-slate-900 text-white shadow-xs font-semibold'
-                  : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
-              }`}
-            >
-              <span>{lang}</span>
-              <span
-                className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
-                  isSelected ? 'bg-slate-800 text-slate-200' : 'bg-slate-200 text-slate-600'
-                }`}
-              >
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {!hasStartedPractice ? (
+        <div className="bg-white border border-slate-200 rounded-lg p-6 sm:p-8 shadow-xs space-y-6">
+          <div>
+            <h3 className="font-serif font-bold text-slate-900 text-lg">Set up your practice</h3>
+            <p className="text-xs text-slate-600 mt-1">Select both options before seeing the questions.</p>
+          </div>
 
-      {/* VIEW 1: QUESTIONS LIST FOR SELECTED LANGUAGE */}
-      {!activeQuestion ? (
+          <div className="space-y-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">1. Choose a coding language</h4>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {availableLanguages.map((language) => (
+                <button
+                  key={language}
+                  type="button"
+                  onClick={() => {
+                    setSelectedLanguage(language);
+                    setGeneratedQuestions([]);
+                    setQuestionGenerationError(null);
+                  }}
+                  aria-pressed={selectedLanguage === language}
+                  className={`px-3 py-2.5 rounded-md border text-xs font-medium transition ${
+                    selectedLanguage === language
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {language}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">2. Choose your level</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {availableDifficulties.map((difficulty) => (
+                <button
+                  key={difficulty}
+                  type="button"
+                  onClick={() => {
+                    setSelectedDifficulty(difficulty);
+                    setGeneratedQuestions([]);
+                    setQuestionGenerationError(null);
+                  }}
+                  aria-pressed={selectedDifficulty === difficulty}
+                  className={`p-4 rounded-md border text-left transition ${
+                    selectedDifficulty === difficulty
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <span className="block text-sm font-semibold">{difficulty}</span>
+                  <span className={`block text-xs mt-1 ${
+                    selectedDifficulty === difficulty ? 'text-slate-300' : 'text-slate-500'
+                  }`}>
+                    {difficulty === 'Beginner' && 'Learn core concepts and build confidence'}
+                    {difficulty === 'Intermediate' && 'Practice common patterns and problem-solving'}
+                    {difficulty === 'Advanced' && 'Tackle complex algorithms and edge cases'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void handleStartPractice()}
+            disabled={!selectedLanguage || !selectedDifficulty || isGeneratingQuestions}
+            className="px-5 py-2.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {isGeneratingQuestions ? 'Preparing questions...' : 'Show My Questions'}
+          </button>
+          {questionGenerationError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded text-xs text-red-700" role="alert">
+              {questionGenerationError}
+            </div>
+          )}
+        </div>
+      ) : !activeQuestion ? (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-serif font-bold text-slate-900 text-lg">
-              {selectedLanguage} Practice Questions ({languageQuestions.length})
+              {selectedLanguage} · {selectedDifficulty} Questions ({languageQuestions.length})
             </h3>
-            <span className="text-xs text-slate-500">
-              Click any question below to type your answer and run checks
-            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setHasStartedPractice(false);
+                setActiveQuestionId(null);
+                setCheckResult(null);
+                setGeneratedQuestions([]);
+                setQuestionGenerationError(null);
+              }}
+              className="text-xs font-medium text-slate-700 underline underline-offset-4 hover:text-slate-900"
+            >
+              Change language or level
+            </button>
           </div>
 
           {languageQuestions.length > 0 ? (
@@ -289,13 +394,16 @@ export const SmartCodingPracticeView: React.FC<SmartCodingPracticeViewProps> = (
                 No questions loaded for {selectedLanguage}
               </h4>
               <p className="text-xs text-slate-600 max-w-md mx-auto">
-                Select Python, JavaScript, TypeScript, Java, C++, Go, or SQL to start coding.
+                There are no {selectedDifficulty?.toLowerCase()} questions currently available for {selectedLanguage}. Change your language or level to see available questions.
               </p>
               <button
-                onClick={() => setSelectedLanguage('Python')}
+                onClick={() => {
+                  setHasStartedPractice(false);
+                  setSelectedDifficulty('');
+                }}
                 className="px-4 py-2 rounded-md bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition"
               >
-                Switch to Python Questions
+                Choose a different level or language
               </button>
             </div>
           )}
@@ -433,7 +541,7 @@ export const SmartCodingPracticeView: React.FC<SmartCodingPracticeViewProps> = (
                     <button
                       onClick={handleResetCode}
                       className="flex items-center space-x-1 text-slate-500 hover:text-slate-900 transition"
-                      title="Reset code editor to starter template"
+                      title="Clear code editor"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       <span>Reset</span>

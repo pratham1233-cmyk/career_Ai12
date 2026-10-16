@@ -1,9 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import * as pdfjs from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { CVAnalysisResult } from '../types/career';
 import { analyzeCvApi } from '../services/aiApi';
-import { sampleCvText } from '../data/mockData';
 import {
   FileText,
   Upload,
@@ -12,7 +11,6 @@ import {
   AlertCircle,
   FolderGit2,
   GraduationCap,
-  HardDrive,
   Award,
   Layers,
   RefreshCw,
@@ -24,54 +22,44 @@ interface CVAnalysisViewProps {
   currentAnalysis: CVAnalysisResult;
   targetCareer: string;
   candidateName: string;
-  candidateEmail: string;
   onUpdateAnalysis: (analysis: CVAnalysisResult) => void;
-  onRequestDriveExport: (filename: string, content: string) => void;
 }
 
 export const CVAnalysisView: React.FC<CVAnalysisViewProps> = ({
   currentAnalysis,
   targetCareer,
   candidateName,
-  candidateEmail,
   onUpdateAnalysis,
-  onRequestDriveExport,
 }) => {
-  const personalizedSampleCvText = sampleCvText
-    .trim()
-    .replace(/^ARJUN MEHTA/m, candidateName.toUpperCase())
-    .replace('arjun.mehta@iitb.ac.in', candidateEmail);
-  const previousSampleCvText = useRef(personalizedSampleCvText);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [cvInputText, setCvInputText] = useState(personalizedSampleCvText);
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
-  const [isReadingFile, setIsReadingFile] = useState(false);
+  const cvFileInputRef = useRef<HTMLInputElement>(null);
+  const jobDescriptionFileInputRef = useRef<HTMLInputElement>(null);
+  const [cvInputText, setCvInputText] = useState('');
+  const [jobDescriptionInputText, setJobDescriptionInputText] = useState('');
+  const [uploadedCvFileName, setUploadedCvFileName] = useState<string | null>(null);
+  const [uploadedJobDescriptionFileName, setUploadedJobDescriptionFileName] = useState<string | null>(null);
+  const [readingDocument, setReadingDocument] = useState<'cv' | 'jobDescription' | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    setCvInputText((currentText) =>
-      currentText === previousSampleCvText.current ? personalizedSampleCvText : currentText
-    );
-    previousSampleCvText.current = personalizedSampleCvText;
-  }, [personalizedSampleCvText]);
-
-  const handleCvFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDocumentUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    documentType: 'cv' | 'jobDescription'
+  ) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
 
     if (!/\.(pdf|txt|md)$/i.test(file.name)) {
-      setErrorMessage('Please upload a PDF, plain-text, or Markdown CV (.pdf, .txt, or .md).');
+      setErrorMessage('Please upload both documents as PDF, plain-text, or Markdown files (.pdf, .txt, or .md).');
       return;
     }
 
     if (file.size > 20 * 1024 * 1024) {
-      setErrorMessage('The selected CV is larger than 20 MB. Please choose a smaller file.');
+      setErrorMessage(`${file.name} is larger than 20 MB. Please choose a smaller file.`);
       return;
     }
 
-    setIsReadingFile(true);
+    setReadingDocument(documentType);
     setErrorMessage(null);
     try {
       let text: string;
@@ -97,26 +85,38 @@ export const CVAnalysisView: React.FC<CVAnalysisViewProps> = ({
         setErrorMessage(
           /\.pdf$/i.test(file.name)
             ? 'No selectable text was found in this PDF. If it is a scanned document, use an OCR-enabled PDF or upload a text/Markdown file.'
-            : 'The selected CV file is empty.'
+            : `The selected ${documentType === 'cv' ? 'CV' : 'job description'} file is empty.`
         );
         return;
       }
-      setCvInputText(text);
-      setUploadedFileName(file.name);
+      if (documentType === 'cv') {
+        setCvInputText(text);
+        setUploadedCvFileName(file.name);
+      } else {
+        setJobDescriptionInputText(text);
+        setUploadedJobDescriptionFileName(file.name);
+      }
     } catch (error) {
-      console.error('CV file upload failed:', error);
+      console.error(`${documentType === 'cv' ? 'CV' : 'Job description'} file upload failed:`, error);
       setErrorMessage('Could not read the selected file. Check that it is a valid PDF, .txt, or .md file.');
     } finally {
-      setIsReadingFile(false);
+      setReadingDocument(null);
     }
   };
 
   const handleRunAnalysis = async () => {
-    if (!cvInputText.trim()) return;
+    if (!uploadedCvFileName || !uploadedJobDescriptionFileName) {
+      setErrorMessage('Upload both a CV and a job description before running the comparison.');
+      return;
+    }
+    if (!cvInputText.trim() || !jobDescriptionInputText.trim()) {
+      setErrorMessage('Both uploaded documents must contain readable text.');
+      return;
+    }
     setIsAnalyzing(true);
     setErrorMessage(null);
     try {
-      const result = await analyzeCvApi(cvInputText, targetCareer);
+      const result = await analyzeCvApi(cvInputText, jobDescriptionInputText, targetCareer);
       onUpdateAnalysis({
         ...result,
         analyzedAt: new Date().toLocaleDateString(),
@@ -126,40 +126,6 @@ export const CVAnalysisView: React.FC<CVAnalysisViewProps> = ({
     } finally {
       setIsAnalyzing(false);
     }
-  };
-
-  const handleExportToDrive = () => {
-    const reportText = `
-CAREERAI CV ANALYSIS REPORT
-Generated on: ${currentAnalysis.analyzedAt || new Date().toLocaleDateString()}
-Target Career: ${targetCareer}
-Overall ATS Score: ${currentAnalysis.overallScore}%
-
-SCORE BREAKDOWN:
-- Skills: ${currentAnalysis.scoreBreakdown.skills}%
-- Experience: ${currentAnalysis.scoreBreakdown.experience}%
-- Projects: ${currentAnalysis.scoreBreakdown.projects}%
-- Achievements: ${currentAnalysis.scoreBreakdown.achievements}%
-- Formatting: ${currentAnalysis.scoreBreakdown.formatting}%
-
-SUMMARY:
-${currentAnalysis.summary}
-
-MISSING INFORMATION IDENTIFIED:
-${currentAnalysis.missingInformation.map((m) => `- ${m}`).join('\n')}
-
-IMPROVEMENT OPPORTUNITIES:
-${currentAnalysis.improvementOpportunities.map((o) => `- ${o}`).join('\n')}
-
-RECOMMENDED PROJECTS TO BOOST SCORE:
-${currentAnalysis.recommendedProjects
-  .map(
-    (p, i) =>
-      `${i + 1}. ${p.title} (${p.techStack.join(', ')}) - Est. ${p.estimatedHours} hrs\n   Rationale: ${p.rationale}`
-  )
-  .join('\n')}
-`;
-    onRequestDriveExport(`CareerAI_CV_Analysis_${targetCareer.replace(/\s+/g, '_')}.txt`, reportText);
   };
 
   return (
@@ -174,18 +140,8 @@ ${currentAnalysis.recommendedProjects
           </div>
           <h2 className="text-2xl font-serif font-bold text-slate-900">CV & Resume Deep Analysis</h2>
           <p className="text-xs text-slate-600 mt-1">
-            Evaluate keyword match rates, recruiter parsing fidelity, and concrete impact statements.
+            Compare your CV with a specific job description to identify your match, missing requirements, and improvement opportunities.
           </p>
-        </div>
-
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={handleExportToDrive}
-            className="flex items-center space-x-2 px-3.5 py-2 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-medium text-slate-800 transition"
-          >
-            <HardDrive className="w-4 h-4 text-slate-600" />
-            <span>Save Report to Drive</span>
-          </button>
         </div>
       </div>
 
@@ -197,48 +153,82 @@ ${currentAnalysis.recommendedProjects
             <div className="flex items-center pb-2 border-b border-slate-100">
               <h3 className="text-sm font-semibold text-slate-900 flex items-center space-x-2">
                 <Upload className="w-4 h-4 text-slate-600" />
-                <span>Resume Input</span>
+                <span>Required Documents</span>
               </h3>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown"
-                onChange={handleCvFileUpload}
-                className="sr-only"
-                aria-label="Upload a PDF or plain-text CV"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isReadingFile}
-                className="px-3 py-2 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-medium text-slate-800 transition"
-              >
-                {isReadingFile ? 'Reading CV...' : 'Upload CV (.pdf, .txt, .md)'}
-              </button>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <input
+                  ref={cvFileInputRef}
+                  type="file"
+                  accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown"
+                  onChange={(event) => void handleDocumentUpload(event, 'cv')}
+                  className="sr-only"
+                  aria-label="Upload your CV"
+                />
+                <button
+                  type="button"
+                  onClick={() => cvFileInputRef.current?.click()}
+                  disabled={readingDocument !== null}
+                  className="px-3 py-2 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-medium text-slate-800 transition disabled:opacity-50"
+                >
+                  {readingDocument === 'cv' ? 'Reading CV...' : 'Upload CV (.pdf, .txt, .md)'}
+                </button>
+                <p className="text-xs text-slate-500">
+                  {uploadedCvFileName || 'CV file required'}
+                </p>
+                <label htmlFor="cv-input-text" className="block text-xs text-slate-500">
+                  CV text extracted from the file:
+                </label>
+                <textarea
+                  id="cv-input-text"
+                  value={cvInputText}
+                  onChange={(event) => setCvInputText(event.target.value)}
+                  rows={8}
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-900 font-mono leading-relaxed focus:outline-none focus:border-slate-400 focus:bg-white resize-y"
+                  placeholder="Upload a CV to extract its text..."
+                />
+              </div>
+
+              <div className="space-y-2 border-t border-slate-100 pt-4">
+                <input
+                  ref={jobDescriptionFileInputRef}
+                  type="file"
+                  accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown"
+                  onChange={(event) => void handleDocumentUpload(event, 'jobDescription')}
+                  className="sr-only"
+                  aria-label="Upload the job description"
+                />
+                <button
+                  type="button"
+                  onClick={() => jobDescriptionFileInputRef.current?.click()}
+                  disabled={readingDocument !== null}
+                  className="px-3 py-2 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-medium text-slate-800 transition disabled:opacity-50"
+                >
+                  {readingDocument === 'jobDescription'
+                    ? 'Reading job description...'
+                    : 'Upload Job Description (.pdf, .txt, .md)'}
+                </button>
+                <p className="text-xs text-slate-500">
+                  {uploadedJobDescriptionFileName || 'Job description file required'}
+                </p>
+                <label htmlFor="job-description-input-text" className="block text-xs text-slate-500">
+                  Job description text extracted from the file:
+                </label>
+                <textarea
+                  id="job-description-input-text"
+                  value={jobDescriptionInputText}
+                  onChange={(event) => setJobDescriptionInputText(event.target.value)}
+                  rows={8}
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-900 font-mono leading-relaxed focus:outline-none focus:border-slate-400 focus:bg-white resize-y"
+                  placeholder="Upload the job description to extract its text..."
+                />
+              </div>
             </div>
             <p className="text-xs text-slate-500">
-              Signed in as <span className="font-medium text-slate-800">{candidateName}</span>
-              {uploadedFileName && <> · Loaded: <span className="font-medium text-slate-800">{uploadedFileName}</span></>}
+              Signed in as <span className="font-medium text-slate-800">{candidateName}</span>. Upload both files to run a job-specific comparison.
             </p>
-
-            <div>
-              <label className="block text-xs text-slate-500 mb-1.5">
-                Paste or edit plain text resume:
-              </label>
-              <textarea
-                value={cvInputText}
-                onChange={(e) => {
-                  setCvInputText(e.target.value);
-                  setUploadedFileName(null);
-                }}
-                rows={14}
-                className="w-full bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-900 font-mono leading-relaxed focus:outline-none focus:border-slate-400 focus:bg-white resize-none"
-                placeholder="Paste your CV text here..."
-              />
-            </div>
 
             {errorMessage && (
               <div className="p-3 bg-red-50 border border-red-200 rounded text-xs text-red-700">
@@ -248,18 +238,25 @@ ${currentAnalysis.recommendedProjects
 
             <button
               onClick={handleRunAnalysis}
-              disabled={isAnalyzing || !cvInputText.trim()}
+              disabled={
+                isAnalyzing ||
+                readingDocument !== null ||
+                !uploadedCvFileName ||
+                !uploadedJobDescriptionFileName ||
+                !cvInputText.trim() ||
+                !jobDescriptionInputText.trim()
+              }
               className="w-full flex items-center justify-center space-x-2 py-2 px-4 rounded-md bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs transition disabled:opacity-50"
             >
               {isAnalyzing ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Evaluating with Gemini...</span>
+                  <span>Comparing CV with Job Description...</span>
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  <span>Analyze CV</span>
+                  <span>Compare CV with Job Description</span>
                 </>
               )}
             </button>
@@ -268,6 +265,53 @@ ${currentAnalysis.recommendedProjects
 
         {/* Right Col: Scorecard & Section Performance */}
         <div className="lg:col-span-7 space-y-6">
+          {currentAnalysis.jobDescriptionMatch && (
+            <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wider font-semibold text-slate-500">Job-Specific Evaluation</p>
+                  <h3 className="text-xl font-serif font-bold text-slate-900 mt-0.5">CV / Job Description Match</h3>
+                </div>
+                <div className="w-20 h-20 rounded-md bg-indigo-50 border border-indigo-200 flex flex-col items-center justify-center text-center shrink-0">
+                  <span className="text-2xl font-bold font-mono text-indigo-900">{currentAnalysis.jobDescriptionMatch.matchScore}%</span>
+                  <span className="text-[10px] text-indigo-700 font-semibold uppercase">Match</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-emerald-800">Requirements found in your CV</h4>
+                  {currentAnalysis.jobDescriptionMatch.matchedRequirements.length > 0 ? (
+                    <ul className="space-y-1.5 text-xs text-slate-600">
+                      {currentAnalysis.jobDescriptionMatch.matchedRequirements.map((item, index) => (
+                        <li key={index}>• {item}</li>
+                      ))}
+                    </ul>
+                  ) : <p className="text-xs text-slate-500">No direct matches were identified.</p>}
+                </div>
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-rose-800">Missing or unverified requirements</h4>
+                  {currentAnalysis.jobDescriptionMatch.missingRequirements.length > 0 ? (
+                    <ul className="space-y-1.5 text-xs text-slate-600">
+                      {currentAnalysis.jobDescriptionMatch.missingRequirements.map((item, index) => (
+                        <li key={index}>• {item}</li>
+                      ))}
+                    </ul>
+                  ) : <p className="text-xs text-slate-500">No major gaps were identified.</p>}
+                </div>
+              </div>
+              {currentAnalysis.jobDescriptionMatch.additionalInsights.length > 0 && (
+                <div className="border-t border-slate-100 pt-3 space-y-2">
+                  <h4 className="text-xs font-semibold text-slate-800">Other insights and next steps</h4>
+                  <ul className="space-y-1.5 text-xs text-slate-600">
+                    {currentAnalysis.jobDescriptionMatch.additionalInsights.map((item, index) => (
+                      <li key={index}>• {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Overall ATS Score Card */}
           <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-xs space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

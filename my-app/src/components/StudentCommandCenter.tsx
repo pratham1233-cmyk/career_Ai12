@@ -5,6 +5,7 @@ import {
   LeetCodeData,
   CVAnalysisResult,
   Job,
+  JobApplication,
 } from '../types/career';
 import {
   Compass,
@@ -29,6 +30,7 @@ interface StudentCommandCenterProps {
   leetcode: LeetCodeData;
   cvAnalysis: CVAnalysisResult;
   topJobs: Job[];
+  applications: JobApplication[];
   onNavigateTab: (tab: string) => void;
 }
 
@@ -38,6 +40,7 @@ export const StudentCommandCenter: React.FC<StudentCommandCenterProps> = ({
   leetcode,
   cvAnalysis,
   topJobs,
+  applications,
   onNavigateTab,
 }) => {
   const completedSkillsCount = skills.filter((s) => s.score >= 75).length;
@@ -240,7 +243,7 @@ export const StudentCommandCenter: React.FC<StudentCommandCenterProps> = ({
                 <div className="text-sm font-bold text-slate-900 flex items-center justify-between">
                   <span>{profile.targetCareer}</span>
                   <span className="text-xs px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-mono">
-                    $135k - $165k
+                    ₹1.29Cr - ₹1.57Cr
                   </span>
                 </div>
                 <p className="text-xs text-slate-600 mt-1">Focused on distributed backend microservices and reliable APIs.</p>
@@ -265,6 +268,19 @@ export const StudentCommandCenter: React.FC<StudentCommandCenterProps> = ({
                   </div>
                 ))}
               </div>
+
+              <button
+                onClick={() => onNavigateTab('applications')}
+                className="w-full p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-md flex items-center justify-between text-left transition"
+              >
+                <span>
+                  <span className="block text-xs font-semibold text-slate-900">Application Tracker</span>
+                  <span className="block text-[11px] text-slate-600 mt-0.5">
+                    {applications.length} {applications.length === 1 ? 'application' : 'applications'} in your pipeline
+                  </span>
+                </span>
+                <ChevronRight className="w-4 h-4 text-indigo-700 shrink-0" />
+              </button>
             </div>
           </div>
 

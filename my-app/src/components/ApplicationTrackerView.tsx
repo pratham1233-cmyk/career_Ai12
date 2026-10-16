@@ -1,26 +1,17 @@
 import React from 'react';
 import { JobApplication } from '../types/career';
 import {
-  FileSpreadsheet,
-  Building2,
-  Calendar,
-  CheckCircle2,
   Clock,
-  ArrowRight,
-  Sparkles,
-  ExternalLink,
 } from 'lucide-react';
 
 interface ApplicationTrackerViewProps {
   applications: JobApplication[];
   onUpdateStatus: (id: string, status: JobApplication['status']) => void;
-  onRequestSheetsExport: (title: string, headers: string[], rows: (string | number)[][]) => void;
 }
 
 export const ApplicationTrackerView: React.FC<ApplicationTrackerViewProps> = ({
   applications,
   onUpdateStatus,
-  onRequestSheetsExport,
 }) => {
   const statuses: JobApplication['status'][] = [
     'Applied',
@@ -33,20 +24,6 @@ export const ApplicationTrackerView: React.FC<ApplicationTrackerViewProps> = ({
     'Hired',
     'Rejected',
   ];
-
-  const handleExportToSheets = () => {
-    const headers = ['Company', 'Position', 'Match Score (%)', 'Status', 'Date Applied', 'Last Updated', 'Notes'];
-    const rows = applications.map((app) => [
-      app.company,
-      app.jobTitle,
-      `${app.matchScore}%`,
-      app.status,
-      app.appliedDate,
-      app.lastUpdated,
-      app.notes || '',
-    ]);
-    onRequestSheetsExport('CareerAI_Application_Tracker', headers, rows);
-  };
 
   const getStatusBadge = (status: JobApplication['status']) => {
     switch (status) {
@@ -79,17 +56,9 @@ export const ApplicationTrackerView: React.FC<ApplicationTrackerViewProps> = ({
           </div>
           <h2 className="text-2xl font-bold text-white mt-1">Application Tracker</h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Monitor interview progression, recruiter milestones, and synchronized Google Sheets pipelines.
+            Monitor interview progression and recruiter milestones.
           </p>
         </div>
-
-        <button
-          onClick={handleExportToSheets}
-          className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-xs font-semibold text-white shadow-sm transition"
-        >
-          <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-          <span>Export Tracker to Google Sheets</span>
-        </button>
       </div>
 
       {/* Applications Table Card */}

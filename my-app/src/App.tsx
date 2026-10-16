@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { initAuth, googleSignIn, logout } from './services/firebase';
+import { loadUserWorkspace, saveUserWorkspace } from './services/userWorkspace';
 import { uploadToGoogleDrive, createGoogleSheet } from './services/googleWorkspace';
 import {
   initialStudentProfile,
@@ -12,7 +13,6 @@ import {
   initialJobs,
   initialApplications,
   initialTrends,
-  initialTimeline,
   initialRecruiterCandidates,
   initialNotifications,
 } from './data/mockData';
@@ -27,7 +27,6 @@ import {
   Job,
   JobApplication,
   IndustryTrend,
-  TimelineEvent,
   RecruiterCandidate,
   PlatformNotification,
 } from './types/career';
@@ -41,7 +40,6 @@ import { IndustryTrendsView } from './components/IndustryTrendsView';
 import { CourseRecommendationsView } from './components/CourseRecommendationsView';
 import { JobDiscoveryView } from './components/JobDiscoveryView';
 import { ApplicationTrackerView } from './components/ApplicationTrackerView';
-import { ProgressTimelineView } from './components/ProgressTimelineView';
 import { RecruiterDashboardView } from './components/RecruiterDashboardView';
 import { WorkspaceExportModal } from './components/WorkspaceExportModal';
 import { InterviewPreparationView } from './components/InterviewPreparationView';
@@ -73,9 +71,14 @@ export default function App() {
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
   const [applications, setApplications] = useState<JobApplication[]>(initialApplications);
   const [trends, setTrends] = useState<IndustryTrend[]>(initialTrends);
-  const [timeline, setTimeline] = useState<TimelineEvent[]>(initialTimeline);
   const [recruiterCandidates, setRecruiterCandidates] = useState<RecruiterCandidate[]>(initialRecruiterCandidates);
   const [notifications, setNotifications] = useState<PlatformNotification[]>(initialNotifications);
+  const [workspaceSyncStatus, setWorkspaceSyncStatus] = useState<
+    'idle' | 'loading' | 'saving' | 'saved' | 'error'
+  >('idle');
+  const [workspaceSyncError, setWorkspaceSyncError] = useState<string | null>(null);
+  const [loadedWorkspaceUserId, setLoadedWorkspaceUserId] = useState<string | null>(null);
+  const userId = user?.uid ?? null;
   const displayedStudentProfile = user
     ? {
         ...studentProfile,
@@ -118,6 +121,108 @@ export default function App() {
     );
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!userId) {
+      setLoadedWorkspaceUserId(null);
+      setWorkspaceSyncStatus('idle');
+      setWorkspaceSyncError(null);
+      setStudentProfile(initialStudentProfile);
+      setSkills(initialSkills);
+      setLeetcodeData(initialLeetCodeData);
+      setCvAnalysis(initialCvAnalysis);
+      setInterviewReadiness(68);
+      setApplications(initialApplications);
+      setNotifications(initialNotifications);
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    setLoadedWorkspaceUserId(null);
+    setWorkspaceSyncStatus('loading');
+    setWorkspaceSyncError(null);
+
+    void loadUserWorkspace(userId)
+      .then((workspace) => {
+        if (isCancelled) return;
+
+        if (workspace) {
+          setStudentProfile(workspace.studentProfile);
+          setSkills(workspace.skills);
+          setLeetcodeData(workspace.leetcodeData);
+          setCvAnalysis(workspace.cvAnalysis);
+          setInterviewReadiness(workspace.interviewReadiness);
+          setApplications(workspace.applications);
+          setNotifications(workspace.notifications);
+        }
+
+        setLoadedWorkspaceUserId(userId);
+        setWorkspaceSyncStatus('saved');
+      })
+      .catch((error: unknown) => {
+        if (isCancelled) return;
+        console.error('Failed to load the Firestore workspace:', error);
+        setWorkspaceSyncError(
+          error instanceof Error ? error.message : 'An unknown Firestore error occurred.'
+        );
+        setWorkspaceSyncStatus('error');
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId || loadedWorkspaceUserId !== userId) return;
+
+    let isCancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      setWorkspaceSyncStatus('saving');
+      setWorkspaceSyncError(null);
+
+      void saveUserWorkspace(userId, {
+        studentProfile,
+        skills,
+        leetcodeData,
+        cvAnalysis,
+        interviewReadiness,
+        applications,
+        notifications,
+      })
+        .then(() => {
+          if (!isCancelled) {
+            setWorkspaceSyncStatus('saved');
+          }
+        })
+        .catch((error: unknown) => {
+          if (isCancelled) return;
+          console.error('Failed to save the Firestore workspace:', error);
+          setWorkspaceSyncError(
+            error instanceof Error ? error.message : 'An unknown Firestore error occurred.'
+          );
+          setWorkspaceSyncStatus('error');
+        });
+    }, 600);
+
+    return () => {
+      isCancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    userId,
+    loadedWorkspaceUserId,
+    studentProfile,
+    skills,
+    leetcodeData,
+    cvAnalysis,
+    interviewReadiness,
+    applications,
+    notifications,
+  ]);
 
   // Handle Google Sign In
   const handleGoogleSignIn = async () => {
@@ -301,6 +406,21 @@ export default function App() {
         }
         isRecruiterUnlocked={isRecruiterUnlocked}
       />
+      {user && workspaceSyncStatus !== 'saved' && (
+        <div
+          className={`px-4 py-2 text-center text-xs ${
+            workspaceSyncStatus === 'error'
+              ? 'bg-rose-50 text-rose-800'
+              : 'bg-slate-100 text-slate-600'
+          }`}
+          role={workspaceSyncStatus === 'error' ? 'alert' : 'status'}
+        >
+          {workspaceSyncStatus === 'loading' && 'Loading your saved workspace from Firestore...'}
+          {workspaceSyncStatus === 'saving' && 'Saving your workspace to Firestore...'}
+          {workspaceSyncStatus === 'error' &&
+            `Firestore sync failed: ${workspaceSyncError || 'Unknown error'}`}
+        </div>
+      )}
 
       {/* Main View Port Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -328,6 +448,7 @@ export default function App() {
                 leetcode={leetcodeData}
                 cvAnalysis={cvAnalysis}
                 topJobs={jobs}
+                applications={applications}
                 onNavigateTab={(tab) => setActiveTab(tab)}
               />
             )}
@@ -362,9 +483,7 @@ export default function App() {
                 currentAnalysis={cvAnalysis}
                 targetCareer={studentProfile.targetCareer}
                 candidateName={displayedStudentProfile.name}
-                candidateEmail={displayedStudentProfile.email}
                 onUpdateAnalysis={(analysis) => setCvAnalysis(analysis)}
-                onRequestDriveExport={handleRequestDriveExport}
               />
             )}
 
@@ -395,11 +514,9 @@ export default function App() {
                     prev.map((a) => (a.id === id ? { ...a, status, lastUpdated: 'Today' } : a))
                   )
                 }
-                onRequestSheetsExport={handleRequestSheetsExport}
               />
             )}
 
-            {activeTab === 'timeline' && <ProgressTimelineView timeline={timeline} />}
           </>
         ) : (
           <RecruiterDashboardView

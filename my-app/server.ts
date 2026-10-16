@@ -27,7 +27,7 @@ const ai = hasGeminiKey ? new GoogleGenAI({
   },
 }) : null;
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-3.8-flash';
 
 function getGeminiErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
@@ -58,23 +58,6 @@ const fallbackLiveTrends = {
 };
 
 const fallbackCareerChatReply = 'Based on your profile, you are trending in the right direction. Focus on shipping a project that combines technical depth with measurable outcomes, then target role-specific skills such as system design, cloud deployment, and coding fluency.';
-const fallbackAdaptiveQuestions = {
-  questions: [
-    {
-      id: 'aq-1',
-      title: 'Array Traversal',
-      topic: 'Arrays',
-      difficulty: 'Intermediate',
-      type: 'MCQ',
-      question: 'What is the time complexity of finding the maximum value in an unsorted array of n elements?',
-      options: ['O(1)', 'O(log n)', 'O(n)', 'O(n log n)'],
-      correctAnswer: 'O(n)',
-      explanation: 'A linear scan must inspect each element at least once to determine the maximum.',
-      hint: 'You need to check each value once.'
-    }
-  ]
-};
-
 const fallbackJobPrep = {
   jobTitle: 'Software Engineer',
   company: 'Target Company',
@@ -153,19 +136,29 @@ async function startServer() {
   // 1. CV / Resume Analysis Route with Gemini
   app.post('/api/ai/analyze-cv', async (req: Request, res: Response) => {
     try {
-      const { cvText, targetCareer } = req.body;
+      const { cvText, jobDescriptionText, targetCareer } = req.body;
       if (!cvText) {
         return res.status(400).json({ error: 'CV text or content is required' });
+      }
+      if (!jobDescriptionText) {
+        return res.status(400).json({ error: 'Job description text or content is required' });
       }
 
       const prompt = `
 You are an expert technical recruiter and ATS career analyst.
-Analyze the following student/candidate CV for the target career "${targetCareer || 'Software Engineer'}".
+Analyze the candidate CV for the target career "${targetCareer || 'Software Engineer'}" and compare it directly with the supplied job description.
 
 CV Content:
 """
 ${cvText}
 """
+
+Job Description:
+"""
+${jobDescriptionText}
+"""
+
+For the job description comparison, list requirements clearly supported by the CV as matched, and requirements not evidenced in the CV as missing. Do not assume the candidate has a skill or experience that is not stated. Include a 0-100 match score and concise additional insights about strengths, gaps, or practical next steps.
 
 Return a valid JSON object ONLY (do not include markdown ticks, just JSON) with this exact schema:
 {
@@ -185,6 +178,12 @@ Return a valid JSON object ONLY (do not include markdown ticks, just JSON) with 
     "projects": [{"title": string, "technologies": [string], "description": string}],
     "certifications": [string],
     "achievements": [string]
+  },
+  "jobDescriptionMatch": {
+    "matchScore": number (0-100),
+    "matchedRequirements": [string],
+    "missingRequirements": [string],
+    "additionalInsights": [string]
   },
   "missingInformation": [string],
   "improvementOpportunities": [string],
@@ -217,6 +216,21 @@ Return a valid JSON object ONLY (do not include markdown ticks, just JSON) with 
       const responseText = response.text || '{}';
       const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
       const parsed = JSON.parse(cleanJson);
+      const jobDescriptionMatch = parsed.jobDescriptionMatch;
+      if (
+        !jobDescriptionMatch ||
+        !Number.isFinite(jobDescriptionMatch.matchScore) ||
+        jobDescriptionMatch.matchScore < 0 ||
+        jobDescriptionMatch.matchScore > 100 ||
+        !Array.isArray(jobDescriptionMatch.matchedRequirements) ||
+        !jobDescriptionMatch.matchedRequirements.every((item: unknown) => typeof item === 'string') ||
+        !Array.isArray(jobDescriptionMatch.missingRequirements) ||
+        !jobDescriptionMatch.missingRequirements.every((item: unknown) => typeof item === 'string') ||
+        !Array.isArray(jobDescriptionMatch.additionalInsights) ||
+        !jobDescriptionMatch.additionalInsights.every((item: unknown) => typeof item === 'string')
+      ) {
+        throw new Error('Gemini returned an incomplete CV-to-job comparison. Please try again.');
+      }
       return res.json(parsed);
     } catch (error: any) {
       console.error('CV Analysis error:', error);
@@ -402,33 +416,45 @@ Keep answers actionable, encouraging, and structured with concrete next steps (e
   // 4. Adaptive Question Generator for Weak Areas
   app.post('/api/ai/adaptive-practice', async (req: Request, res: Response) => {
     try {
-      const { language, weakTopics, difficulty, count } = req.body;
+      const { language = 'Python', weakTopics = [], difficulty = 'Intermediate', count = 3 } = req.body;
+      const requestedCount = Math.min(Math.max(Number(count) || 3, 1), 5);
+      if (
+        typeof language !== 'string' ||
+        !['Beginner', 'Intermediate', 'Advanced'].includes(difficulty) ||
+        !Array.isArray(weakTopics) ||
+        (typeof count !== 'number' && typeof count !== 'undefined')
+      ) {
+        return res.status(400).json({ error: 'A supported language and difficulty level are required.' });
+      }
 
       const prompt = `
-Generate ${count || 3} tailored coding practice questions in ${language || 'Python'} focusing on student weak areas: ${weakTopics?.join(', ') || 'Recursion and Algorithms'}.
-Difficulty level: ${difficulty || 'Intermediate'}.
-
-Include varied question types: MCQ, Debugging, and Output Prediction.
-Format output strictly as JSON array:
-[
-  {
+Generate exactly ${requestedCount} coding challenge questions in ${language}, focusing on these areas where useful: ${weakTopics.join(', ') || 'core programming and algorithms'}.
+Every question must be appropriate for exactly the ${difficulty} level and be solvable using ${language}.
+Return valid JSON only, as an object with a "questions" array matching this structure:
+{
+  "questions": [{
     "id": string,
     "title": string,
+    "language": "${language}",
     "topic": string,
-    "difficulty": "Beginner" | "Intermediate" | "Advanced",
-    "type": "MCQ" | "Debugging" | "OutputPrediction",
-    "question": string,
-    "codeSnippet": string (optional),
-    "options": [string] (for MCQ),
+    "difficulty": "${difficulty}",
+    "type": "CodingChallenge",
+    "prompt": string,
+    "starterCode": string,
+    "testCases": [{"input": string, "expected": string, "description": string}],
+    "constraints": [string],
     "correctAnswer": string,
     "explanation": string,
     "hint": string
+  }]
   }
-]
+Use valid ${language} starterCode and correctAnswer, and include at least two testCases with expected outputs.
 `;
 
       if (!ai) {
-        return res.json(fallbackAdaptiveQuestions);
+        return res.status(503).json({
+          error: 'Question generation is unavailable. Set GEMINI_API_KEY in .env.local and restart the server.',
+        });
       }
 
       const response = await ai.models.generateContent({
@@ -439,8 +465,36 @@ Format output strictly as JSON array:
         },
       });
 
-      const cleanJson = (response.text || '[]').replace(/```json/g, '').replace(/```/g, '').trim();
-      const questions = JSON.parse(cleanJson);
+      const cleanJson = (response.text || '{}').replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleanJson);
+      if (!Array.isArray(parsed.questions) || parsed.questions.length < requestedCount) {
+        throw new Error(`The question generator returned fewer than ${requestedCount} questions. Please try again.`);
+      }
+      const questions = parsed.questions.map((question: any, index: number) => {
+        if (
+          typeof question.title !== 'string' ||
+          typeof question.topic !== 'string' ||
+          typeof question.prompt !== 'string' ||
+          typeof question.starterCode !== 'string' ||
+          typeof question.correctAnswer !== 'string' ||
+          typeof question.explanation !== 'string' ||
+          typeof question.hint !== 'string' ||
+          !Array.isArray(question.testCases) ||
+          !question.testCases.every(
+            (testCase: any) =>
+              typeof testCase.input === 'string' && typeof testCase.expected === 'string'
+          )
+        ) {
+          throw new Error(`The question generator returned invalid question ${index + 1}. Please try again.`);
+        }
+        return {
+          ...question,
+          id: `generated-${Date.now()}-${index}`,
+          language,
+          difficulty,
+          type: 'CodingChallenge',
+        };
+      });
       return res.json({ questions });
     } catch (error: any) {
       console.error('Adaptive practice error:', error);

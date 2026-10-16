@@ -79,6 +79,12 @@ export interface CVAnalysisResult {
     certifications: string[];
     achievements: string[];
   };
+  jobDescriptionMatch?: {
+    matchScore: number;
+    matchedRequirements: string[];
+    missingRequirements: string[];
+    additionalInsights: string[];
+  };
   missingInformation: string[];
   improvementOpportunities: string[];
   recommendedProjects: {
@@ -109,7 +115,7 @@ export interface Course {
   careerPath?: string; // e.g. 'Software Developer', 'Full Stack Developer', 'AI & Machine Learning', 'Cloud & DevOps'
   type?: 'youtube' | 'paid'; // free YouTube course vs paid certification
   url?: string; // YouTube video/playlist link or paid platform link
-  price?: string; // e.g. 'Free on YouTube', '$19.99 on Udemy', '$49/mo on Coursera'
+  price?: string; // e.g. 'Free on YouTube', '₹1,904 on Udemy', '₹4,667/mo on Coursera'
   channelName?: string;
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   duration: string;
@@ -325,4 +331,3 @@ export interface MockInterviewSession {
   feedback: string;
   timestamp: string;
 }
-

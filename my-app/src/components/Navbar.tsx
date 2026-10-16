@@ -7,8 +7,6 @@ import {
   User as UserIcon,
   LogOut,
   ChevronDown,
-  HardDrive,
-  FileSpreadsheet,
   Lock,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
@@ -63,8 +61,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'cv-analysis', label: 'CV Analysis' },
     { id: 'trends', label: 'Industry Trends' },
     { id: 'jobs', label: 'Jobs & Matching' },
-    { id: 'applications', label: 'Applications' },
-    { id: 'timeline', label: 'Journey' },
+    { id: 'applications', label: 'Application Tracker' },
   ];
 
   const recruiterNavItems = [
@@ -76,7 +73,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-40 w-full bg-white border-b border-slate-200">
       {/* Top Header Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10">
         <div className="flex items-center justify-between h-16">
           {/* Classic Logo */}
           <div className="flex items-center space-x-6">
@@ -197,14 +194,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                     alt={user.displayName || 'User'}
                     className="w-6 h-6 rounded object-cover"
                   />
-                  <div className="hidden sm:block text-xs leading-none">
-                    <p className="font-medium text-slate-900 truncate max-w-[120px]">
-                      {user.displayName || 'Connected User'}
+                  <div className="text-xs leading-none">
+                    <p className="font-medium text-slate-900 truncate max-w-[150px]">
+                      Hi, {user.displayName || 'there'}
                     </p>
-                    <div className="flex items-center space-x-1 mt-0.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                      <span className="text-[10px] text-emerald-700">Workspace Synced</span>
-                    </div>
                   </div>
                   <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
                 </button>
@@ -214,17 +207,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <div className="pb-3 border-b border-slate-100 text-xs">
                       <p className="font-semibold text-slate-900">{user.displayName || 'User'}</p>
                       <p className="text-[11px] text-slate-500 truncate">{user.email}</p>
-                    </div>
-
-                    <div className="py-2 space-y-1.5 text-xs text-slate-600">
-                      <div className="flex items-center space-x-2 p-1">
-                        <HardDrive className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Google Drive Connected</span>
-                      </div>
-                      <div className="flex items-center space-x-2 p-1">
-                        <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Google Sheets Connected</span>
-                      </div>
                     </div>
 
                     <div className="pt-2 border-t border-slate-100">
@@ -266,7 +248,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               key={item.id}
               onClick={() => onSelectTab(item.id)}
-              className={`whitespace-nowrap px-3.5 py-2.5 text-xs font-medium border-b-2 transition ${
+              className={`flex-1 min-w-max lg:min-w-0 text-center whitespace-nowrap px-3.5 py-2.5 text-xs font-medium border-b-2 transition ${
                 activeTab === item.id
                   ? 'border-slate-900 text-slate-900 font-semibold'
                   : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
