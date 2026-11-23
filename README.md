@@ -215,7 +215,7 @@ CareerAI uses technology to create a more inclusive, connected, and opportunity-
 - Integration with external job portals.
 - Skill assessments and certifications.
 - Personalized AI learning assistant.
-
+can be used for multiple purposes
 ---
 
 🏁 Conclusion
