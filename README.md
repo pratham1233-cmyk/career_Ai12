@@ -227,5 +227,4 @@ Its goal is to empower students to make informed career decisions, improve their
 ---
 
 <p align="center">
-  <strong>Built with Next.js, Tailwind CSS, Firebase, and AI 🚀</strong>
 </p>
